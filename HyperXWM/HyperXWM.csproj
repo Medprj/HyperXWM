@@ -2,10 +2,21 @@
 
     <PropertyGroup>
         <OutputType>WinExe</OutputType>
-        <TargetFramework>net9.0-windows</TargetFramework>
+        <TargetFramework>net8.0-windows</TargetFramework>
         <Nullable>enable</Nullable>
         <UseWindowsForms>true</UseWindowsForms>
-        <ImplicitUsings>enable</ImplicitUsings>
+        <ApplicationIcon>icon.ico</ApplicationIcon>
+        <LangVersion>latest</LangVersion>
     </PropertyGroup>
+
+    <ItemGroup>
+      <PackageReference Include="HidSharp" Version="2.1.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <None Update="icon.ico">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </None>
+    </ItemGroup>
 
 </Project>
