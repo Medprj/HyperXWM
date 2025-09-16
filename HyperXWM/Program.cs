@@ -1,7 +1,7 @@
-namespace HyperXWM;
-
 using System;
 using System.Windows.Forms;
+
+namespace HyperXWM;
 
 internal static class Program
 {
