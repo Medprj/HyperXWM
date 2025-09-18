@@ -17,15 +17,24 @@ public sealed class TrayApp : ApplicationContext
     private const int BatteryOffset = 4; // incoming report containing battery level
     private const byte QueryRid = 0x66; // byte position with percentage (0..100)
     private const byte BatteryStatusRid = 0x89; // report ID for battery status query
+    private const byte CablePluggedInStatusRid = 0x8A;
+    private const byte BatteryLevelChangedStatusRid = 0x0C;
+    private const int CablePluggedInStatusOffset = 2;
     private const int ConnectionStatusOffset = 1; // byte position with connection state 
     private const byte ConnectionStatusRid = 0x0D; // report ID for connection status
+    private const int CommandOffset = 1;
+    private const int StatusOffset = 2;
+
     private static readonly byte[] QueryPayload = [BatteryStatusRid]; // outgoing report (ping)
 
     private readonly NotifyIcon _tray;
     private HidDevice? _device;
     private HidStream? _stream;
 
+    private bool _isCablePluggedIn;
+    private bool _isConnected;
     private int? _lastBattery;
+
     private bool _busy; // prevents concurrent update attempts
     private bool _running = true; // main loop control flag
 
@@ -161,6 +170,11 @@ public sealed class TrayApp : ApplicationContext
         }
 
         var hasBatteryValue = false;
+        
+        // init commands
+        await SendQuery([ConnectionStatusRid]); 
+        await SendQuery([CablePluggedInStatusRid]);
+        await SendQuery([BatteryStatusRid]);
 
         while (_running)
         {
@@ -176,24 +190,47 @@ public sealed class TrayApp : ApplicationContext
                 var isSuccess = await TryReadAsync(buf);
                 if (isSuccess)
                 {
-                    if (buf[ConnectionStatusOffset] == ConnectionStatusRid)
+                    switch (buf[CommandOffset])
                     {
-                        UpdateBatteryLevel(0);
-                        hasBatteryValue = false;
-                        continue;
-                    }
+                        case ConnectionStatusRid:
+                            _isConnected = buf[StatusOffset] != 0x00;
+                            if (_isConnected)
+                            {
+                                await SendQuery([CablePluggedInStatusRid]);
+                                await SendQuery([BatteryStatusRid]); 
+                            }
+                            else
+                            {
+                                UpdateBatteryLevel(0, _isCablePluggedIn);
+                            }
 
-                    if (TryParseBattery(buf, out var percent))
-                    {
-                        UpdateBatteryLevel(percent);
-                        hasBatteryValue = true;
+                            hasBatteryValue = false;
+                            continue;
+
+                        case CablePluggedInStatusRid:
+                            _isCablePluggedIn = buf[StatusOffset] == 0x01;
+                            UpdateBatteryLevel(_lastBattery ?? 0, _isCablePluggedIn);
+                            continue;
+
+                        case BatteryLevelChangedStatusRid:
+                            _isCablePluggedIn = buf[StatusOffset] == 0x01;
+                            hasBatteryValue = false;
+                            continue;
+
+                        case BatteryStatusRid when TryParseBattery(buf, out var percent):
+                            UpdateBatteryLevel(percent, _isCablePluggedIn);
+                            hasBatteryValue = true;
+                            break;
                     }
                 }
                 else
                 {
-                    if (!hasBatteryValue)
+                    if (_isConnected)
                     {
-                        await SendQuery();
+                        if (!hasBatteryValue)
+                        {
+                            await SendQuery([BatteryStatusRid]);
+                        }
                     }
                 }
             }
@@ -236,6 +273,29 @@ public sealed class TrayApp : ApplicationContext
         {
             _busy = false;
         }
+    }
+
+
+    /// <summary>
+    /// Sends a query command (ping) to the device.
+    /// </summary>
+    private async Task SendQuery(byte[] queryPayload)
+    {
+        if (_stream is null || _device is null)
+        {
+            return;
+        }
+
+        var outputLength = _device.GetMaxOutputReportLength();
+        if (outputLength <= 0)
+        {
+            return;
+        }
+
+        var outputBuf = new byte[outputLength];
+        outputBuf[0] = QueryRid;
+        Array.Copy(queryPayload, 0, outputBuf, 1, Math.Min(queryPayload.Length, outputBuf.Length - 1));
+        await _stream.WriteAsync(outputBuf);
     }
 
     /// <summary>
@@ -310,16 +370,16 @@ public sealed class TrayApp : ApplicationContext
     /// <summary>
     /// Updates the tray icon text when the battery level changes.
     /// </summary>
-    private void UpdateBatteryLevel(int percent)
+    private void UpdateBatteryLevel(int percent, bool isConnected = false)
     {
-        if (_lastBattery == percent)
+        if (_lastBattery == percent && isConnected == _isConnected)
         {
             return;
         }
 
         _lastBattery = percent;
 
-        UpdateTrayIcon(percent);
+        UpdateTrayIcon(percent, isConnected);
     }
 
     /// <summary>
@@ -365,7 +425,7 @@ public sealed class TrayApp : ApplicationContext
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
     private static extern bool DestroyIcon(IntPtr handle);
 
-    private void UpdateTrayIcon(int percent)
+    private void UpdateTrayIcon(int percent, bool isConnected = false)
     {
         // Destroy old icon
         if (_tray.Icon != null)
@@ -374,10 +434,17 @@ public sealed class TrayApp : ApplicationContext
             _tray.Icon.Dispose();
         }
 
-        // Set new icon
-        _tray.Icon = BatteryTrayIconRenderer.CreateIcon(percent);
+        if (isConnected)
+        {
+            // Set charging icon
+            _tray.Icon = BatteryTrayIconRenderer.CreateChargeIcon(percent);
+            _tray.Text = $"Headset: Charging… {percent + "%"}";
 
-        // tooltip
+            return;
+        }
+
+        // Set battery level icon
+        _tray.Icon = BatteryTrayIconRenderer.CreateIcon(percent);
         _tray.Text = $"Headset: Battery {percent}%";
     }
 }
