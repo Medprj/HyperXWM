@@ -21,6 +21,7 @@ public sealed class TrayApp : ApplicationContext
     private const byte BatteryLevelChangedStatusRid = 0x0C;
     private const int CablePluggedInStatusOffset = 2;
     private const int ConnectionStatusOffset = 1; // byte position with connection state 
+    private const byte ConnectionStatusRequestRid = 0x82; // report ID for connection status
     private const byte ConnectionStatusRid = 0x0D; // report ID for connection status
     private const int CommandOffset = 1;
     private const int StatusOffset = 2;
@@ -46,7 +47,7 @@ public sealed class TrayApp : ApplicationContext
         _tray = new NotifyIcon
         {
             Visible = true,
-            Icon = new Icon("icon.ico"),
+            Icon = Resources.icon,
             Text = "Headset: starting…",
             ContextMenuStrip = BuildMenu()
         };
@@ -172,7 +173,7 @@ public sealed class TrayApp : ApplicationContext
         var hasBatteryValue = false;
         
         // init commands
-        await SendQuery([ConnectionStatusRid]); 
+        await SendQuery([ConnectionStatusRequestRid]); 
         await SendQuery([CablePluggedInStatusRid]);
         await SendQuery([BatteryStatusRid]);
 
@@ -193,6 +194,7 @@ public sealed class TrayApp : ApplicationContext
                     switch (buf[CommandOffset])
                     {
                         case ConnectionStatusRid:
+                        case ConnectionStatusRequestRid:
                             _isConnected = buf[StatusOffset] != 0x00;
                             if (_isConnected)
                             {
@@ -201,7 +203,7 @@ public sealed class TrayApp : ApplicationContext
                             }
                             else
                             {
-                                UpdateBatteryLevel(0, _isCablePluggedIn);
+                                UpdateTrayIcon(0);
                             }
 
                             hasBatteryValue = false;
@@ -209,7 +211,7 @@ public sealed class TrayApp : ApplicationContext
 
                         case CablePluggedInStatusRid:
                             _isCablePluggedIn = buf[StatusOffset] == 0x01;
-                            UpdateBatteryLevel(_lastBattery ?? 0, _isCablePluggedIn);
+                            UpdateTrayIcon(_lastBattery ?? 0);
                             continue;
 
                         case BatteryLevelChangedStatusRid:
@@ -218,7 +220,7 @@ public sealed class TrayApp : ApplicationContext
                             continue;
 
                         case BatteryStatusRid when TryParseBattery(buf, out var percent):
-                            UpdateBatteryLevel(percent, _isCablePluggedIn);
+                            UpdateTrayIcon(percent);
                             hasBatteryValue = true;
                             break;
                     }
@@ -234,7 +236,7 @@ public sealed class TrayApp : ApplicationContext
                     }
                 }
             }
-            catch
+            catch (Exception e)
             {
                 Close();
                 SetTray("Reconnecting…");
@@ -368,25 +370,17 @@ public sealed class TrayApp : ApplicationContext
     }
 
     /// <summary>
-    /// Updates the tray icon text when the battery level changes.
-    /// </summary>
-    private void UpdateBatteryLevel(int percent, bool isConnected = false)
-    {
-        if (_lastBattery == percent && isConnected == _isConnected)
-        {
-            return;
-        }
-
-        _lastBattery = percent;
-
-        UpdateTrayIcon(percent, isConnected);
-    }
-
-    /// <summary>
     /// Updates the tray icon text with a custom status message.
     /// </summary>
     private void SetTray(string text)
     {
+        if (_tray.Icon != null)
+        {
+            _ = DestroyIcon(_tray.Icon.Handle);
+            _tray.Icon.Dispose();
+        }
+
+        _tray.Icon = Resources.Dis;
         _tray.Text = $"Headset: {text}";
     }
 
@@ -425,26 +419,57 @@ public sealed class TrayApp : ApplicationContext
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
     private static extern bool DestroyIcon(IntPtr handle);
 
-    private void UpdateTrayIcon(int percent, bool isConnected = false)
+    /// <summary>
+    /// Updates the tray icon text when the battery level changes.
+    /// </summary>
+    private void UpdateTrayIcon(int percent)
     {
-        // Destroy old icon
         if (_tray.Icon != null)
         {
             _ = DestroyIcon(_tray.Icon.Handle);
             _tray.Icon.Dispose();
         }
 
-        if (isConnected)
+        if (!_isConnected)
         {
-            // Set charging icon
-            _tray.Icon = BatteryTrayIconRenderer.CreateChargeIcon(percent);
-            _tray.Text = $"Headset: Charging… {percent + "%"}";
+            SetDisconnectedIcon();
+            return;
+        }
+
+        if (_isCablePluggedIn)
+        {
+            SetChargingIcon();
 
             return;
         }
 
-        // Set battery level icon
-        _tray.Icon = BatteryTrayIconRenderer.CreateIcon(percent);
+        SetBatteryLevelIcon(percent);
+        _lastBattery = percent;
+    }
+
+    private void SetBatteryLevelIcon(int percent)
+    {
+        _tray.Icon = percent switch
+        {
+            0 => Resources.Empty,
+            <= 20 => Resources.b20,
+            > 20 and <= 50 => Resources.b50,
+            > 50 and <= 70 => Resources.b70,
+            > 70 => Resources.b100
+        };
+
         _tray.Text = $"Headset: Battery {percent}%";
+    }
+
+    private void SetChargingIcon()
+    {
+        _tray.Icon = Resources.Ch;
+        _tray.Text = "Headset: Charging…";
+    }
+
+    private void SetDisconnectedIcon()
+    {
+        _tray.Icon = Resources.Dis;
+        _tray.Text = "Headset: Charging…";
     }
 }
