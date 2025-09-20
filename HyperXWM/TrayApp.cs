@@ -1,10 +1,10 @@
 using System;
-using System.Drawing;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using HidSharp;
+using Microsoft.Win32;
 
 namespace HyperXWM;
 
@@ -13,20 +13,22 @@ public sealed class TrayApp : ApplicationContext
     // --- Cloud III Wireless ---
     private const int VendorId = 0x03F0; // HP Inc.
     private const int ProductId = 0x05B7; // HyperX Cloud III Wireless dongle
-    private const byte BatteryRid = 0x66; // incoming report containing battery level
-    private const int BatteryOffset = 4; // incoming report containing battery level
-    private const byte QueryRid = 0x66; // byte position with percentage (0..100)
-    private const byte BatteryStatusRid = 0x89; // report ID for battery status query
-    private const byte CablePluggedInStatusRid = 0x8A;
-    private const byte BatteryLevelChangedStatusRid = 0x0C;
-    private const int CablePluggedInStatusOffset = 2;
-    private const int ConnectionStatusOffset = 1; // byte position with connection state 
-    private const byte ConnectionStatusRequestRid = 0x82; // report ID for connection status
-    private const byte ConnectionStatusRid = 0x0D; // report ID for connection status
-    private const int CommandOffset = 1;
-    private const int StatusOffset = 2;
 
-    private static readonly byte[] QueryPayload = [BatteryStatusRid]; // outgoing report (ping)
+    private const byte ReportId  = 0x66; // constant HID report ID for device status queries and responses
+    
+    private const byte CablePluggedInStatusRid = 0x8A; // report ID for cable plugged-in status
+    private const byte BatteryLevelChangedStatusRid = 0x0C; // report ID for battery level changed event
+    private const byte ConnectionStatusRequestRid = 0x82; // report ID for connection status request
+    private const byte ConnectionStatusRid = 0x0D; // report ID for connection status response
+    private const byte BatteryStatusRid = 0x89; // report ID for battery status query
+    private const int BatteryOffset = 4; // incoming report containing battery level
+
+    private const int CommandOffset = 1; // offset of the command field in the report
+    private const int StatusOffset = 2; // offset of the status field in the report
+
+    // Boolean-like values returned in device status reports
+    private const byte DeviceStatusFalse = 0x00; // represents "false" state in device response
+    private const byte DeviceStatusTrue  = 0x01; // represents "true" state in device response
 
     private readonly NotifyIcon _tray;
     private HidDevice? _device;
@@ -44,6 +46,8 @@ public sealed class TrayApp : ApplicationContext
     /// </summary>
     public TrayApp()
     {
+        SystemEvents.PowerModeChanged += OnPowerModeChanged;
+        
         _tray = new NotifyIcon
         {
             Visible = true,
@@ -54,7 +58,7 @@ public sealed class TrayApp : ApplicationContext
 
         _ = Task.Run(() =>
         {
-            OpenAsync();
+            Open();
             if (_stream != null)
             {
                 _ = RunAsync();
@@ -127,11 +131,26 @@ public sealed class TrayApp : ApplicationContext
         Close();
         Application.Exit();
     }
+    
+    /// <summary>
+    /// Handles system power mode changes (resume/suspend) to open or close the device connection.
+    /// </summary>
+    private void OnPowerModeChanged(object? sender, PowerModeChangedEventArgs e)
+    {
+        if (e.Mode == PowerModes.Resume)
+        {
+            Open();
+        }
+        else if (e.Mode == PowerModes.Suspend)
+        {
+            Close();
+        }
+    }
 
     /// <summary>
     /// Opens a connection to the HID device by VID/PID and sets timeouts.
     /// </summary>
-    private void OpenAsync()
+    private void Open()
     {
         Close();
         var device = DeviceList.Local.GetHidDevices()
@@ -181,7 +200,7 @@ public sealed class TrayApp : ApplicationContext
         {
             if (_stream is null || _device is null)
             {
-                OpenAsync();
+                Open();
                 continue;
             }
 
@@ -195,7 +214,7 @@ public sealed class TrayApp : ApplicationContext
                     {
                         case ConnectionStatusRid:
                         case ConnectionStatusRequestRid:
-                            _isConnected = buf[StatusOffset] != 0x00;
+                            _isConnected = buf[StatusOffset] != DeviceStatusFalse;
                             if (_isConnected)
                             {
                                 await SendQuery([CablePluggedInStatusRid]);
@@ -210,12 +229,12 @@ public sealed class TrayApp : ApplicationContext
                             continue;
 
                         case CablePluggedInStatusRid:
-                            _isCablePluggedIn = buf[StatusOffset] == 0x01;
+                            _isCablePluggedIn = buf[StatusOffset] == DeviceStatusTrue;
                             UpdateTrayIcon(_lastBattery ?? 0);
                             continue;
 
                         case BatteryLevelChangedStatusRid:
-                            _isCablePluggedIn = buf[StatusOffset] == 0x01;
+                            _isCablePluggedIn = buf[StatusOffset] == DeviceStatusTrue;
                             hasBatteryValue = false;
                             continue;
 
@@ -236,12 +255,12 @@ public sealed class TrayApp : ApplicationContext
                     }
                 }
             }
-            catch (Exception e)
+            catch
             {
                 Close();
                 SetTray("Reconnecting…");
                 await Task.Delay(500);
-                OpenAsync();
+                Open();
             }
         }
     }
@@ -261,7 +280,7 @@ public sealed class TrayApp : ApplicationContext
         {
             if (_stream is null || _device is null)
             {
-                OpenAsync();
+                Open();
             }
 
             if (_stream is null)
@@ -269,7 +288,7 @@ public sealed class TrayApp : ApplicationContext
                 return;
             }
 
-            await SendQuery();
+            await SendQuery([BatteryStatusRid]);
         }
         finally
         {
@@ -295,30 +314,8 @@ public sealed class TrayApp : ApplicationContext
         }
 
         var outputBuf = new byte[outputLength];
-        outputBuf[0] = QueryRid;
+        outputBuf[0] = ReportId;
         Array.Copy(queryPayload, 0, outputBuf, 1, Math.Min(queryPayload.Length, outputBuf.Length - 1));
-        await _stream.WriteAsync(outputBuf);
-    }
-
-    /// <summary>
-    /// Sends a query command (ping) to the device.
-    /// </summary>
-    private async Task SendQuery()
-    {
-        if (_stream is null || _device is null)
-        {
-            return;
-        }
-
-        var outputLength = _device.GetMaxOutputReportLength();
-        if (outputLength <= 0)
-        {
-            return;
-        }
-
-        var outputBuf = new byte[outputLength];
-        outputBuf[0] = QueryRid;
-        Array.Copy(QueryPayload, 0, outputBuf, 1, Math.Min(QueryPayload.Length, outputBuf.Length - 1));
         await _stream.WriteAsync(outputBuf);
     }
 
@@ -349,12 +346,12 @@ public sealed class TrayApp : ApplicationContext
             return false;
         }
 
-        if (buf[0] != BatteryRid)
+        if (buf[0] != ReportId)
         {
             return false;
         }
 
-        if (buf[1] != QueryPayload[0])
+        if (buf[1] != BatteryStatusRid)
         {
             return false;
         }
@@ -409,6 +406,7 @@ public sealed class TrayApp : ApplicationContext
     {
         if (disposing)
         {
+            SystemEvents.PowerModeChanged -= OnPowerModeChanged;
             _tray.Dispose();
             Close();
         }
@@ -447,26 +445,35 @@ public sealed class TrayApp : ApplicationContext
         _lastBattery = percent;
     }
 
+    /// <summary>
+    /// Updates the tray icon and tooltip text based on the current battery percentage.
+    /// </summary>
     private void SetBatteryLevelIcon(int percent)
     {
         _tray.Icon = percent switch
         {
             0 => Resources.Empty,
             <= 20 => Resources.b20,
-            > 20 and <= 50 => Resources.b50,
-            > 50 and <= 70 => Resources.b70,
+            <= 50 => Resources.b50,
+            <= 70 => Resources.b70,
             > 70 => Resources.b100
         };
 
         _tray.Text = $"Headset: Battery {percent}%";
     }
 
+    /// <summary>
+    /// Sets the tray icon and tooltip to indicate that the headset is charging.
+    /// </summary>
     private void SetChargingIcon()
     {
         _tray.Icon = Resources.Ch;
         _tray.Text = "Headset: Charging…";
     }
 
+    /// <summary>
+    /// Sets the tray icon and tooltip to indicate that the headset is disconnected.
+    /// </summary>
     private void SetDisconnectedIcon()
     {
         _tray.Icon = Resources.Dis;
