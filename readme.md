@@ -17,8 +17,8 @@ Built with WinForms and depends on the [HidSharp](https://www.zer7.com/software/
 ## Device Information
 | Parameter | Value    |                                    |
 |-----------|----------|------------------------------------|
-| **VID**   | `0x03F0` | (HP Inc.)                          |
-| **PID**   | `0x05B7` | (HyperX Cloud III Wireless dongle) |
+| **VID**   | `0x03F0` | HP Inc.                            |
+| **PID**   | `0x05B7` | HyperX Cloud III Wireless dongle   |
 
 
 ## HID Reports (RID = 0x66)
