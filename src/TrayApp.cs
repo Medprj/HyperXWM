@@ -1,4 +1,5 @@
 using System;
+using System.Drawing;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
@@ -11,6 +12,8 @@ namespace HyperXWM;
 public sealed class TrayApp : ApplicationContext
 {
     // --- Cloud III Wireless ---
+    private const string DeviceName = "HyperX Cloud III";
+    
     private const int VendorId = 0x03F0; // HP Inc.
     private const int ProductId = 0x05B7; // HyperX Cloud III Wireless dongle
 
@@ -23,6 +26,7 @@ public sealed class TrayApp : ApplicationContext
     private const byte BatteryStatusRid = 0x89; // report ID for battery status query
     private const int BatteryOffset = 4; // incoming report containing battery level
 
+    private const int ReportIdOffset = 0; // offset of the report ID field in the report
     private const int CommandOffset = 1; // offset of the command field in the report
     private const int StatusOffset = 2; // offset of the status field in the report
 
@@ -36,7 +40,6 @@ public sealed class TrayApp : ApplicationContext
 
     private bool _isCablePluggedIn;
     private bool _isConnected;
-    private int? _lastBattery;
 
     private bool _busy; // prevents concurrent update attempts
     private bool _running = true; // main loop control flag
@@ -139,7 +142,7 @@ public sealed class TrayApp : ApplicationContext
     {
         if (e.Mode == PowerModes.Resume)
         {
-            Open();
+            _ = Ping();
         }
         else if (e.Mode == PowerModes.Suspend)
         {
@@ -180,6 +183,16 @@ public sealed class TrayApp : ApplicationContext
     }
 
     /// <summary>
+    /// Sends status queries to check connection, cable, and battery states.
+    /// </summary>
+    private async Task Ping()
+    {
+        await SendQuery([ConnectionStatusRequestRid]);
+        await SendQuery([CablePluggedInStatusRid]);
+        await SendQuery([BatteryStatusRid]);
+    }
+
+    /// <summary>
     /// Main loop: listens for incoming reports and requests battery state if necessary.
     /// </summary>
     private async Task RunAsync()
@@ -192,9 +205,7 @@ public sealed class TrayApp : ApplicationContext
         var hasBatteryValue = false;
         
         // init commands
-        await SendQuery([ConnectionStatusRequestRid]); 
-        await SendQuery([CablePluggedInStatusRid]);
-        await SendQuery([BatteryStatusRid]);
+        await Ping();
 
         while (_running)
         {
@@ -222,24 +233,20 @@ public sealed class TrayApp : ApplicationContext
                             }
                             else
                             {
-                                UpdateTrayIcon(0);
+                                UpdateBatteryStatus(0);
                             }
 
                             hasBatteryValue = false;
                             continue;
 
                         case CablePluggedInStatusRid:
-                            _isCablePluggedIn = buf[StatusOffset] == DeviceStatusTrue;
-                            UpdateTrayIcon(_lastBattery ?? 0);
-                            continue;
-
                         case BatteryLevelChangedStatusRid:
                             _isCablePluggedIn = buf[StatusOffset] == DeviceStatusTrue;
                             hasBatteryValue = false;
                             continue;
 
                         case BatteryStatusRid when TryParseBattery(buf, out var percent):
-                            UpdateTrayIcon(percent);
+                            UpdateBatteryStatus(percent);
                             hasBatteryValue = true;
                             break;
                     }
@@ -288,7 +295,7 @@ public sealed class TrayApp : ApplicationContext
                 return;
             }
 
-            await SendQuery([BatteryStatusRid]);
+            await Ping();
         }
         finally
         {
@@ -296,9 +303,8 @@ public sealed class TrayApp : ApplicationContext
         }
     }
 
-
     /// <summary>
-    /// Sends a query command (ping) to the device.
+    /// Sends a query command to the device.
     /// </summary>
     private async Task SendQuery(byte[] queryPayload)
     {
@@ -314,7 +320,7 @@ public sealed class TrayApp : ApplicationContext
         }
 
         var outputBuf = new byte[outputLength];
-        outputBuf[0] = ReportId;
+        outputBuf[ReportIdOffset] = ReportId;
         Array.Copy(queryPayload, 0, outputBuf, 1, Math.Min(queryPayload.Length, outputBuf.Length - 1));
         await _stream.WriteAsync(outputBuf);
     }
@@ -346,12 +352,12 @@ public sealed class TrayApp : ApplicationContext
             return false;
         }
 
-        if (buf[0] != ReportId)
+        if (buf[ReportIdOffset] != ReportId)
         {
             return false;
         }
 
-        if (buf[1] != BatteryStatusRid)
+        if (buf[CommandOffset] != BatteryStatusRid)
         {
             return false;
         }
@@ -364,21 +370,6 @@ public sealed class TrayApp : ApplicationContext
         }
 
         return false;
-    }
-
-    /// <summary>
-    /// Updates the tray icon text with a custom status message.
-    /// </summary>
-    private void SetTray(string text)
-    {
-        if (_tray.Icon != null)
-        {
-            _ = DestroyIcon(_tray.Icon.Handle);
-            _tray.Icon.Dispose();
-        }
-
-        _tray.Icon = Resources.Dis;
-        _tray.Text = $"Headset: {text}";
     }
 
     /// <summary>
@@ -414,20 +405,11 @@ public sealed class TrayApp : ApplicationContext
         base.Dispose(disposing);
     }
 
-    [DllImport("user32.dll", CharSet = CharSet.Auto)]
-    private static extern bool DestroyIcon(IntPtr handle);
-
     /// <summary>
-    /// Updates the tray icon text when the battery level changes.
+    /// Updates the battery status.
     /// </summary>
-    private void UpdateTrayIcon(int percent)
+    private void UpdateBatteryStatus(int percent)
     {
-        if (_tray.Icon != null)
-        {
-            _ = DestroyIcon(_tray.Icon.Handle);
-            _tray.Icon.Dispose();
-        }
-
         if (!_isConnected)
         {
             SetDisconnectedIcon();
@@ -436,13 +418,11 @@ public sealed class TrayApp : ApplicationContext
 
         if (_isCablePluggedIn)
         {
-            SetChargingIcon();
-
+            SetChargingIcon(percent);
             return;
         }
 
         SetBatteryLevelIcon(percent);
-        _lastBattery = percent;
     }
 
     /// <summary>
@@ -450,7 +430,7 @@ public sealed class TrayApp : ApplicationContext
     /// </summary>
     private void SetBatteryLevelIcon(int percent)
     {
-        _tray.Icon = percent switch
+        var icon = percent switch
         {
             0 => Resources.Empty,
             <= 20 => Resources.b20,
@@ -458,17 +438,16 @@ public sealed class TrayApp : ApplicationContext
             <= 70 => Resources.b70,
             > 70 => Resources.b100
         };
-
-        _tray.Text = $"Headset: Battery {percent}%";
+        
+        SetTray($"Battery {percent}%", icon);
     }
 
     /// <summary>
     /// Sets the tray icon and tooltip to indicate that the headset is charging.
     /// </summary>
-    private void SetChargingIcon()
+    private void SetChargingIcon(int percent)
     {
-        _tray.Icon = Resources.Ch;
-        _tray.Text = "Headset: Charging…";
+        SetTray($"Charging… {percent}%", Resources.Ch);
     }
 
     /// <summary>
@@ -476,7 +455,24 @@ public sealed class TrayApp : ApplicationContext
     /// </summary>
     private void SetDisconnectedIcon()
     {
-        _tray.Icon = Resources.Dis;
-        _tray.Text = "Headset: Charging…";
+        SetTray("Disconnected", Resources.Dis);
     }
+
+    /// <summary>
+    /// Updates the tray icon text with a custom status message.
+    /// </summary>
+    private void SetTray(string text, Icon? icon = null)
+    {
+        if (_tray.Icon != null)
+        {
+            _ = DestroyIcon(_tray.Icon.Handle);
+            _tray.Icon.Dispose();
+        }
+
+        _tray.Icon = icon ?? Resources.Dis;
+        _tray.Text = $"{DeviceName}: {text}";
+    }
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    private static extern bool DestroyIcon(IntPtr handle);
 }
