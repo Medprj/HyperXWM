@@ -7,6 +7,9 @@
         <UseWindowsForms>true</UseWindowsForms>
         <LangVersion>latest</LangVersion>
         <ApplicationIcon>assets\icon.ico</ApplicationIcon>
+        <PublishSingleFile>true</PublishSingleFile>
+        <PublishReadyToRun>true</PublishReadyToRun>
+        <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     </PropertyGroup>
 
     <ItemGroup>
