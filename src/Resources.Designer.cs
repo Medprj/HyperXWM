@@ -63,9 +63,39 @@ namespace HyperXWM {
         /// <summary>
         ///   Looks up a localized resource of type System.Drawing.Icon similar to (Icon).
         /// </summary>
+        internal static System.Drawing.Icon b10 {
+            get {
+                object obj = ResourceManager.GetObject("b10", resourceCulture);
+                return ((System.Drawing.Icon)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Icon similar to (Icon).
+        /// </summary>
+        internal static System.Drawing.Icon b10_ch {
+            get {
+                object obj = ResourceManager.GetObject("b10 ch", resourceCulture);
+                return ((System.Drawing.Icon)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Icon similar to (Icon).
+        /// </summary>
         internal static System.Drawing.Icon b100 {
             get {
                 object obj = ResourceManager.GetObject("b100", resourceCulture);
+                return ((System.Drawing.Icon)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Icon similar to (Icon).
+        /// </summary>
+        internal static System.Drawing.Icon b100_ch {
+            get {
+                object obj = ResourceManager.GetObject("b100 ch", resourceCulture);
                 return ((System.Drawing.Icon)(obj));
             }
         }
@@ -83,6 +113,16 @@ namespace HyperXWM {
         /// <summary>
         ///   Looks up a localized resource of type System.Drawing.Icon similar to (Icon).
         /// </summary>
+        internal static System.Drawing.Icon b20_ch {
+            get {
+                object obj = ResourceManager.GetObject("b20 ch", resourceCulture);
+                return ((System.Drawing.Icon)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Icon similar to (Icon).
+        /// </summary>
         internal static System.Drawing.Icon b50 {
             get {
                 object obj = ResourceManager.GetObject("b50", resourceCulture);
@@ -93,9 +133,9 @@ namespace HyperXWM {
         /// <summary>
         ///   Looks up a localized resource of type System.Drawing.Icon similar to (Icon).
         /// </summary>
-        internal static System.Drawing.Icon b70 {
+        internal static System.Drawing.Icon b50_ch {
             get {
-                object obj = ResourceManager.GetObject("b70", resourceCulture);
+                object obj = ResourceManager.GetObject("b50 ch", resourceCulture);
                 return ((System.Drawing.Icon)(obj));
             }
         }
@@ -103,9 +143,9 @@ namespace HyperXWM {
         /// <summary>
         ///   Looks up a localized resource of type System.Drawing.Icon similar to (Icon).
         /// </summary>
-        internal static System.Drawing.Icon Ch {
+        internal static System.Drawing.Icon b60 {
             get {
-                object obj = ResourceManager.GetObject("Ch", resourceCulture);
+                object obj = ResourceManager.GetObject("b60", resourceCulture);
                 return ((System.Drawing.Icon)(obj));
             }
         }
@@ -113,9 +153,9 @@ namespace HyperXWM {
         /// <summary>
         ///   Looks up a localized resource of type System.Drawing.Icon similar to (Icon).
         /// </summary>
-        internal static System.Drawing.Icon Dis {
+        internal static System.Drawing.Icon b60_ch {
             get {
-                object obj = ResourceManager.GetObject("Dis", resourceCulture);
+                object obj = ResourceManager.GetObject("b60 ch", resourceCulture);
                 return ((System.Drawing.Icon)(obj));
             }
         }
@@ -123,9 +163,29 @@ namespace HyperXWM {
         /// <summary>
         ///   Looks up a localized resource of type System.Drawing.Icon similar to (Icon).
         /// </summary>
-        internal static System.Drawing.Icon Empty {
+        internal static System.Drawing.Icon dis {
             get {
-                object obj = ResourceManager.GetObject("Empty", resourceCulture);
+                object obj = ResourceManager.GetObject("dis", resourceCulture);
+                return ((System.Drawing.Icon)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Icon similar to (Icon).
+        /// </summary>
+        internal static System.Drawing.Icon empty {
+            get {
+                object obj = ResourceManager.GetObject("empty", resourceCulture);
+                return ((System.Drawing.Icon)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Icon similar to (Icon).
+        /// </summary>
+        internal static System.Drawing.Icon empty_ch {
+            get {
+                object obj = ResourceManager.GetObject("empty ch", resourceCulture);
                 return ((System.Drawing.Icon)(obj));
             }
         }

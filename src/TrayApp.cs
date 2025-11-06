@@ -432,11 +432,12 @@ public sealed class TrayApp : ApplicationContext
     {
         var icon = percent switch
         {
-            0 => Resources.Empty,
+            0 => Resources.empty,
+            <= 10 => Resources.b10,
             <= 20 => Resources.b20,
             <= 50 => Resources.b50,
-            <= 70 => Resources.b70,
-            > 70 => Resources.b100
+            <= 60 => Resources.b60,
+            > 60 => Resources.b100
         };
         
         SetTray($"Battery {percent}%", icon);
@@ -447,7 +448,17 @@ public sealed class TrayApp : ApplicationContext
     /// </summary>
     private void SetChargingIcon(int percent)
     {
-        SetTray($"Charging… {percent}%", Resources.Ch);
+        var icon = percent switch
+        {
+            0 => Resources.empty_ch,
+            <= 10 => Resources.b10_ch,
+            <= 20 => Resources.b20_ch,
+            <= 50 => Resources.b50_ch,
+            <= 60 => Resources.b60_ch,
+            > 60 => Resources.b100_ch
+        };
+
+        SetTray($"Charging… {percent}%", icon);
     }
 
     /// <summary>
@@ -455,7 +466,7 @@ public sealed class TrayApp : ApplicationContext
     /// </summary>
     private void SetDisconnectedIcon()
     {
-        SetTray("Disconnected", Resources.Dis);
+        SetTray("Disconnected", Resources.dis);
     }
 
     /// <summary>
@@ -469,7 +480,7 @@ public sealed class TrayApp : ApplicationContext
             _tray.Icon.Dispose();
         }
 
-        _tray.Icon = icon ?? Resources.Dis;
+        _tray.Icon = icon ?? Resources.dis;
         _tray.Text = $"{DeviceName}: {text}";
     }
 
