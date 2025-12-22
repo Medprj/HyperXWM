@@ -1,7 +1,7 @@
 using System;
 using System.Drawing;
 using System.Linq;
-using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using HidSharp;
@@ -13,12 +13,12 @@ public sealed class TrayApp : ApplicationContext
 {
     // --- Cloud III Wireless ---
     private const string DeviceName = "HyperX Cloud III";
-    
+
     private const int VendorId = 0x03F0; // HP Inc.
     private const int ProductId = 0x05B7; // HyperX Cloud III Wireless dongle
 
-    private const byte ReportId  = 0x66; // constant HID report ID for device status queries and responses
-    
+    private const byte ReportId = 0x66; // constant HID report ID for device status queries and responses
+
     private const byte CablePluggedInStatusRid = 0x8A; // report ID for cable plugged-in status
     private const byte BatteryLevelChangedStatusRid = 0x0C; // report ID for battery level changed event
     private const byte ConnectionStatusRequestRid = 0x82; // report ID for connection status request
@@ -32,25 +32,36 @@ public sealed class TrayApp : ApplicationContext
 
     // Boolean-like values returned in device status reports
     private const byte DeviceStatusFalse = 0x00; // represents "false" state in device response
-    private const byte DeviceStatusTrue  = 0x01; // represents "true" state in device response
+    private const byte DeviceStatusTrue = 0x01; // represents "true" state in device response
 
-    private readonly NotifyIcon _tray;
     private HidDevice? _device;
     private HidStream? _stream;
 
     private bool _isCablePluggedIn;
     private bool _isConnected;
 
+    private readonly SynchronizationContext _ui;
+    private readonly NotifyIcon _tray;
+    private Icon? _currentIcon;
+
     private bool _busy; // prevents concurrent update attempts
-    private bool _running = true; // main loop control flag
+    private string? _lastError;
+
+    private CancellationTokenSource _cts = new();
+    private Task? _workerLoopTask;
+    private readonly object _sync = new();
+
+    private bool _disposed;
 
     /// <summary>
     /// Initializes the tray application.
     /// </summary>
     public TrayApp()
     {
+        _ui = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
+
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
-        
+
         _tray = new NotifyIcon
         {
             Visible = true,
@@ -59,14 +70,33 @@ public sealed class TrayApp : ApplicationContext
             ContextMenuStrip = BuildMenu()
         };
 
-        _ = Task.Run(() =>
+        StartWorker();
+    }
+
+    private void Ui(Action action)
+    {
+        _ui.Post(_ => action(), null);
+    }
+
+    /// <summary>
+    /// Handles system power mode changes (resume/suspend) to open or close the device connection.
+    /// </summary>
+    private void OnPowerModeChanged(object? sender, PowerModeChangedEventArgs e)
+    {
+        switch (e.Mode)
         {
-            Open();
-            if (_stream != null)
-            {
-                _ = RunAsync();
-            }
-        });
+            case PowerModes.Suspend:
+                StopWorker();
+                break;
+
+            case PowerModes.Resume:
+                StartWorker();
+                break;
+
+            case PowerModes.StatusChange:
+            default:
+                break;
+        }
     }
 
     /// <summary>
@@ -78,7 +108,7 @@ public sealed class TrayApp : ApplicationContext
 
         menu.Items.Add(CreateAutostartMenuItem());
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add(new ToolStripMenuItem("Update now", null, OnUpdateNowClick));
+        menu.Items.Add(new ToolStripMenuItem("Reconnect now", null, OnReconnectClick));
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem("Exit", null, OnExitClick));
 
@@ -105,8 +135,7 @@ public sealed class TrayApp : ApplicationContext
             }
             catch (Exception ex)
             {
-                _tray.BalloonTipText = "Autostart error: " + ex.Message;
-                _tray.ShowBalloonTip(2000);
+                ShowBalloonTip("Error", "Autostart error: " + ex.Message, ToolTipIcon.Error);
                 autostart.Checked = Autostart.IsEnabled();
             }
         };
@@ -118,9 +147,9 @@ public sealed class TrayApp : ApplicationContext
     /// Handles the "Update now" menu click.
     /// Triggers a manual battery status update without blocking the UI thread.
     /// </summary>
-    private void OnUpdateNowClick(object? sender, EventArgs e)
+    private void OnReconnectClick(object? sender, EventArgs e)
     {
-        _ = ManualUpdateAsync();
+        _ = ReconnectAsync();
     }
 
     /// <summary>
@@ -129,25 +158,96 @@ public sealed class TrayApp : ApplicationContext
     /// </summary>
     private void OnExitClick(object? sender, EventArgs e)
     {
-        _running = false;
-        _tray.Visible = false;
-        Close();
+        Dispose();
         Application.Exit();
     }
-    
+
     /// <summary>
-    /// Handles system power mode changes (resume/suspend) to open or close the device connection.
+    /// Starts the background worker loop if it is not already running.
     /// </summary>
-    private void OnPowerModeChanged(object? sender, PowerModeChangedEventArgs e)
+    private void StartWorker()
     {
-        if (e.Mode == PowerModes.Resume)
+        lock (_sync)
         {
-            _ = Ping();
+            if (_workerLoopTask is { IsCompleted: false })
+            {
+                return;
+            }
+
+            if (_cts.IsCancellationRequested)
+            {
+                _cts.Dispose();
+                _cts = new CancellationTokenSource();
+            }
+
+            _workerLoopTask = RunWorkerLoopAsync(_cts.Token);
         }
-        else if (e.Mode == PowerModes.Suspend)
+    }
+
+    /// <summary>
+    /// Stops the background worker loop by requesting cancellation
+    /// and closing the current device connection.
+    /// </summary>
+    private void StopWorker()
+    {
+        lock (_sync)
         {
+            if (_cts.IsCancellationRequested)
+            {
+                return;
+            }
+
+            _cts.Cancel();
             Close();
         }
+    }
+
+    /// <summary>
+    /// Runs the background worker loop with automatic restart on failures.
+    /// </summary>
+    private async Task RunWorkerLoopAsync(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                await RunWorkerOnceAsync(ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                Close();
+
+                if (_lastError != ex.Message)
+                {
+                    _lastError = ex.Message;
+                    ShowBalloonTip("Error", ex.Message, ToolTipIcon.Error);
+                }
+
+                await Task.Delay(TimeSpan.FromSeconds(2), ct);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Executes a single worker session:
+    /// opens the device connection, sends initial queries,
+    /// and starts listening for incoming reports.
+    /// </summary>
+    private async Task RunWorkerOnceAsync(CancellationToken ct)
+    {
+        Open();
+
+        if (_stream is null || _device is null)
+        {
+            throw new InvalidOperationException("Failed to open device stream");
+        }
+
+        await Ping(ct);
+        await ListenDeviceAsync(ct);
     }
 
     /// <summary>
@@ -156,6 +256,7 @@ public sealed class TrayApp : ApplicationContext
     private void Open()
     {
         Close();
+
         var device = DeviceList.Local.GetHidDevices()
             .FirstOrDefault(d =>
                 d.VendorID == VendorId &&
@@ -185,97 +286,80 @@ public sealed class TrayApp : ApplicationContext
     /// <summary>
     /// Sends status queries to check connection, cable, and battery states.
     /// </summary>
-    private async Task Ping()
+    private async Task Ping(CancellationToken ct)
     {
-        await SendQuery([ConnectionStatusRequestRid]);
-        await SendQuery([CablePluggedInStatusRid]);
-        await SendQuery([BatteryStatusRid]);
+        ct.ThrowIfCancellationRequested();
+
+        await SendQuery([ConnectionStatusRequestRid], ct);
+        await SendQuery([CablePluggedInStatusRid], ct);
+        await SendQuery([BatteryStatusRid], ct);
     }
 
     /// <summary>
-    /// Main loop: listens for incoming reports and requests battery state if necessary.
+    /// Listens for incoming reports and requests battery state if necessary.
     /// </summary>
-    private async Task RunAsync()
+    private async Task ListenDeviceAsync(CancellationToken ct)
     {
         if (_stream is null || _device is null)
         {
-            return;
+            throw new InvalidOperationException("Device is not open");
         }
 
         var hasBatteryValue = false;
-        
-        // init commands
-        await Ping();
+        var buf = new byte[_device.GetMaxOutputReportLength()];
 
-        while (_running)
+        while (!ct.IsCancellationRequested)
         {
-            if (_stream is null || _device is null)
+            ct.ThrowIfCancellationRequested();
+
+            var isSuccess = await TryReadAsync(buf);
+
+            if (isSuccess)
             {
-                Open();
-                continue;
-            }
-
-            try
-            {
-                var buf = new byte[_device!.GetMaxOutputReportLength()];
-                var isSuccess = await TryReadAsync(buf);
-                if (isSuccess)
+                switch (buf[CommandOffset])
                 {
-                    switch (buf[CommandOffset])
-                    {
-                        case ConnectionStatusRid:
-                        case ConnectionStatusRequestRid:
-                            _isConnected = buf[StatusOffset] != DeviceStatusFalse;
-                            if (_isConnected)
-                            {
-                                await SendQuery([CablePluggedInStatusRid]);
-                                await SendQuery([BatteryStatusRid]); 
-                            }
-                            else
-                            {
-                                UpdateBatteryStatus(0);
-                            }
-
-                            hasBatteryValue = false;
-                            continue;
-
-                        case CablePluggedInStatusRid:
-                        case BatteryLevelChangedStatusRid:
-                            _isCablePluggedIn = buf[StatusOffset] == DeviceStatusTrue;
-                            hasBatteryValue = false;
-                            continue;
-
-                        case BatteryStatusRid when TryParseBattery(buf, out var percent):
-                            UpdateBatteryStatus(percent);
-                            hasBatteryValue = true;
-                            break;
-                    }
-                }
-                else
-                {
-                    if (_isConnected)
-                    {
-                        if (!hasBatteryValue)
+                    case ConnectionStatusRid:
+                    case ConnectionStatusRequestRid:
+                        _isConnected = buf[StatusOffset] != DeviceStatusFalse;
+                        if (_isConnected)
                         {
-                            await SendQuery([BatteryStatusRid]);
+                            await SendQuery([CablePluggedInStatusRid], ct);
+                            await SendQuery([BatteryStatusRid], ct);
                         }
-                    }
+                        else
+                        {
+                            UpdateBatteryStatus(0);
+                        }
+
+                        hasBatteryValue = false;
+                        continue;
+
+                    case CablePluggedInStatusRid:
+                    case BatteryLevelChangedStatusRid:
+                        _isCablePluggedIn = buf[StatusOffset] == DeviceStatusTrue;
+                        hasBatteryValue = false;
+                        continue;
+
+                    case BatteryStatusRid when TryParseBattery(buf, out var percent):
+                        UpdateBatteryStatus(percent);
+                        hasBatteryValue = true;
+                        break;
                 }
             }
-            catch
+            else
             {
-                Close();
-                SetTray("Reconnecting…");
-                await Task.Delay(500);
-                Open();
+                if (_isConnected && !hasBatteryValue)
+                {
+                    await SendQuery([BatteryStatusRid], ct);
+                }
             }
         }
     }
 
     /// <summary>
-    /// Performs a manual update request from the tray menu.
+    /// Forces a full worker restart to recover from connection or device errors.
     /// </summary>
-    private async Task ManualUpdateAsync()
+    private async Task ReconnectAsync()
     {
         if (_busy)
         {
@@ -285,17 +369,22 @@ public sealed class TrayApp : ApplicationContext
         _busy = true;
         try
         {
-            if (_stream is null || _device is null)
+            SetTray("Restarting…");
+
+            Task? oldTask;
+            lock (_sync)
             {
-                Open();
+                oldTask = _workerLoopTask;
             }
 
-            if (_stream is null)
+            StopWorker();
+
+            if (oldTask is not null)
             {
-                return;
+                await Task.WhenAny(oldTask, Task.Delay(1500));
             }
 
-            await Ping();
+            StartWorker();
         }
         finally
         {
@@ -306,8 +395,10 @@ public sealed class TrayApp : ApplicationContext
     /// <summary>
     /// Sends a query command to the device.
     /// </summary>
-    private async Task SendQuery(byte[] queryPayload)
+    private async Task SendQuery(byte[] queryPayload, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
+
         if (_stream is null || _device is null)
         {
             return;
@@ -322,7 +413,7 @@ public sealed class TrayApp : ApplicationContext
         var outputBuf = new byte[outputLength];
         outputBuf[ReportIdOffset] = ReportId;
         Array.Copy(queryPayload, 0, outputBuf, 1, Math.Min(queryPayload.Length, outputBuf.Length - 1));
-        await _stream.WriteAsync(outputBuf);
+        await _stream.WriteAsync(outputBuf, ct);
     }
 
     /// <summary>
@@ -395,14 +486,36 @@ public sealed class TrayApp : ApplicationContext
     /// </summary>
     protected override void Dispose(bool disposing)
     {
-        if (disposing)
+        if (_disposed)
         {
-            SystemEvents.PowerModeChanged -= OnPowerModeChanged;
-            _tray.Dispose();
-            Close();
+            return;
         }
 
-        base.Dispose(disposing);
+        _disposed = true;
+
+        if (!disposing)
+        {
+            return;
+        }
+
+        SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+
+        StopWorker();
+
+        lock (_sync)
+        {
+            _cts.Dispose();
+        }
+
+        try
+        {
+            _tray.Visible = false;
+            _tray.Dispose();
+        }
+        catch
+        {
+            // ignore cleanup errors on shutdown.
+        }
     }
 
     /// <summary>
@@ -439,7 +552,7 @@ public sealed class TrayApp : ApplicationContext
             <= 60 => Resources.b60,
             > 60 => Resources.b100
         };
-        
+
         SetTray($"Battery {percent}%", icon);
     }
 
@@ -474,16 +587,54 @@ public sealed class TrayApp : ApplicationContext
     /// </summary>
     private void SetTray(string text, Icon? icon = null)
     {
-        if (_tray.Icon != null)
+        _ui.Post(_ =>
         {
-            _ = DestroyIcon(_tray.Icon.Handle);
-            _tray.Icon.Dispose();
-        }
+            _tray.Text = $"{DeviceName}: {Truncate(text, 50)}";
 
-        _tray.Icon = icon ?? Resources.dis;
-        _tray.Text = $"{DeviceName}: {text}";
+            if (icon is null)
+            {
+                return;
+            }
+
+            _currentIcon?.Dispose();
+            _currentIcon = (Icon)icon.Clone();
+            _tray.Icon = _currentIcon;
+        }, null);
     }
 
-    [DllImport("user32.dll", CharSet = CharSet.Auto)]
-    private static extern bool DestroyIcon(IntPtr handle);
+    /// <summary>
+    /// Displays a tray balloon notification.
+    /// </summary>
+    private void ShowBalloonTip(
+        string title,
+        string message,
+        ToolTipIcon icon = ToolTipIcon.Info,
+        int timeoutMs = 3000)
+    {
+        _ui.Post(_ =>
+        {
+            try
+            {
+                _tray.ShowBalloonTip(timeoutMs, title, message, icon);
+            }
+            catch
+            {
+                // Ignore UI errors during shutdown or disposal.
+            }
+        }, null);
+    }
+
+    /// <summary>
+    /// Truncates the specified text to the given maximum length,
+    /// appending an ellipsis if truncation is required.
+    /// </summary>
+    private static string Truncate(string text, int maxLength)
+    {
+        if (string.IsNullOrEmpty(text) || text.Length <= maxLength)
+        {
+            return text;
+        }
+
+        return text[..(maxLength - 1)] + "…";
+    }
 }
