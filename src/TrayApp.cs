@@ -1,11 +1,14 @@
 using System;
 using System.Drawing;
+using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using HidSharp;
 using Microsoft.Win32;
+using Serilog;
 
 namespace HyperXWM;
 
@@ -70,6 +73,8 @@ public sealed class TrayApp : ApplicationContext
             ContextMenuStrip = BuildMenu()
         };
 
+        Log.Information("Application started...");
+
         StartWorker();
     }
 
@@ -87,10 +92,12 @@ public sealed class TrayApp : ApplicationContext
         {
             case PowerModes.Suspend:
                 StopWorker();
+                Log.Information("System suspended");
                 break;
 
             case PowerModes.Resume:
                 StartWorker();
+                Log.Information("System resumed");
                 break;
 
             case PowerModes.StatusChange:
@@ -107,8 +114,6 @@ public sealed class TrayApp : ApplicationContext
         var menu = new ContextMenuStrip();
 
         menu.Items.Add(CreateAutostartMenuItem());
-        menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add(new ToolStripMenuItem("Reconnect now", null, OnReconnectClick));
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(new ToolStripMenuItem("Exit", null, OnExitClick));
 
@@ -215,19 +220,31 @@ public sealed class TrayApp : ApplicationContext
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
+                Log.Debug($"ct.IsCancellationRequested");
                 return;
             }
             catch (Exception ex)
             {
+                Log.Error($"Exception in method 'RunWorkerLoopAsync' {ex}");
+                
                 Close();
+
+                SetDisconnectedIcon();
 
                 if (_lastError != ex.Message)
                 {
                     _lastError = ex.Message;
                     ShowBalloonTip("Error", ex.Message, ToolTipIcon.Error);
                 }
-
-                await Task.Delay(TimeSpan.FromSeconds(2), ct);
+                
+                try 
+                { 
+                    await Task.Delay(TimeSpan.FromSeconds(2), ct); 
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
             }
         }
     }
@@ -261,7 +278,7 @@ public sealed class TrayApp : ApplicationContext
             .FirstOrDefault(d =>
                 d.VendorID == VendorId &&
                 d.ProductID == ProductId &&
-                d.GetMaxOutputReportLength() > 0);
+                d.GetMaxOutputReportLength() == 62);
 
         if (device == null)
         {
