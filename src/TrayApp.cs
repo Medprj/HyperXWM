@@ -50,6 +50,8 @@ public sealed class TrayApp : ApplicationContext
     private bool _busy; // prevents concurrent update attempts
     private string? _lastError;
 
+    private bool _isLight => IsLightTheme(); // System theme
+
     private CancellationTokenSource _cts = new();
     private Task? _workerLoopTask;
     private readonly object _sync = new();
@@ -76,6 +78,20 @@ public sealed class TrayApp : ApplicationContext
         Log.Information("Application started...");
 
         StartWorker();
+    }
+
+    /// <summary>
+    /// Determines whether the system is using the light application theme.
+    /// </summary>
+    private static bool IsLightTheme()
+    {
+        const string keyPath =
+            @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
+
+        using var key = Registry.CurrentUser.OpenSubKey(keyPath);
+        var value = key?.GetValue("AppsUseLightTheme");
+
+        return value is int i && i > 0;
     }
 
     private void Ui(Action action)
@@ -562,12 +578,12 @@ public sealed class TrayApp : ApplicationContext
     {
         var icon = percent switch
         {
-            0 => Resources.empty,
-            <= 10 => Resources.b10,
-            <= 20 => Resources.b20,
-            <= 50 => Resources.b50,
-            <= 60 => Resources.b60,
-            > 60 => Resources.b100
+            0 => _isLight ? Resources.empty_b : Resources.empty,
+            <= 10 => _isLight ? Resources.b10_b : Resources.b10,
+            <= 20 => _isLight ? Resources.b20_b : Resources.b20,
+            <= 50 => _isLight ? Resources.b50_b : Resources.b50,
+            <= 60 => _isLight ? Resources.b60_b : Resources.b60,
+            > 60 => _isLight ? Resources.b100_b : Resources.b100
         };
 
         SetTray($"Battery {percent}%", icon);
@@ -580,12 +596,12 @@ public sealed class TrayApp : ApplicationContext
     {
         var icon = percent switch
         {
-            0 => Resources.empty_ch,
-            <= 10 => Resources.b10_ch,
-            <= 20 => Resources.b20_ch,
-            <= 50 => Resources.b50_ch,
-            <= 60 => Resources.b60_ch,
-            > 60 => Resources.b100_ch
+            0 => _isLight ? Resources.empty_ch_b : Resources.empty_ch,
+            <= 10 => _isLight ? Resources.b10_ch_b : Resources.b10_ch,
+            <= 20 => _isLight ? Resources.b20_ch_b : Resources.b20_ch,
+            <= 50 => _isLight ? Resources.b50_ch_b : Resources.b50_ch,
+            <= 60 => _isLight ? Resources.b60_ch_b : Resources.b60_ch,
+            > 60 => _isLight ? Resources.b100_ch_b : Resources.b100_ch
         };
 
         SetTray($"Charging… {percent}%", icon);

@@ -124,11 +124,23 @@
   <data name="b10 ch" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>assets\b10 ch.ico;System.Drawing.Icon, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
+  <data name="b10 ch_b" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>assets\b10 ch-b.ico;System.Drawing.Icon, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="b10-b" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>assets\b10-b.ico;System.Drawing.Icon, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
   <data name="b20" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>assets\b20.ico;System.Drawing.Icon, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
   <data name="b20 ch" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>assets\b20 ch.ico;System.Drawing.Icon, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="b20 ch-b" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>assets\b20 ch-b.ico;System.Drawing.Icon, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="b20-b" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>assets\b20-b.ico;System.Drawing.Icon, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
   <data name="b50" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>assets\b50.ico;System.Drawing.Icon, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
@@ -136,11 +148,23 @@
   <data name="b50 ch" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>assets\b50 ch.ico;System.Drawing.Icon, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
+  <data name="b50 ch-b" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>assets\b50 ch-b.ico;System.Drawing.Icon, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="b50-b" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>assets\b50-b.ico;System.Drawing.Icon, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
   <data name="b60" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>assets\b60.ico;System.Drawing.Icon, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
   <data name="b60 ch" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>assets\b60 ch.ico;System.Drawing.Icon, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="b60 ch-b" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>assets\b60 ch-b.ico;System.Drawing.Icon, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="b60-b" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>assets\b60-b.ico;System.Drawing.Icon, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
   <data name="b100" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>assets\b100.ico;System.Drawing.Icon, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
@@ -148,14 +172,29 @@
   <data name="b100 ch" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>assets\b100 ch.ico;System.Drawing.Icon, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
+  <data name="b100 ch-b" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>assets\b100 ch-b.ico;System.Drawing.Icon, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="b100-b" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>assets\b100-b.ico;System.Drawing.Icon, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
   <data name="dis" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>assets\dis.ico;System.Drawing.Icon, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="dis-b" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>assets\dis-b.ico;System.Drawing.Icon, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
   <data name="empty" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>assets\empty.ico;System.Drawing.Icon, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
   <data name="empty ch" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>assets\empty ch.ico;System.Drawing.Icon, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="empty ch-b" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>assets\empty ch-b.ico;System.Drawing.Icon, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="empty_b" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>assets\empty-b.ico;System.Drawing.Icon, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
   <data name="icon" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>assets\icon.ico;System.Drawing.Icon, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
