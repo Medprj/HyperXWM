@@ -8,6 +8,7 @@ Built with WinForms and depends on the [HidSharp](https://www.zer7.com/software/
 - Displays battery percentage in the system tray
 - Lightweight and minimal
 - Supports Windows autostart (via registry)
+- Application logging via Serilog
 
 
 ## Screenshot
@@ -31,6 +32,9 @@ Built with WinForms and depends on the [HidSharp](https://www.zer7.com/software/
 | Cable pluggedIn status         | `0x8A`     | 2               |                                          |
 | Connection status request      | `0x82`     |	2               |                                          |
 
+## Dependencies
+- [HidSharp](https://www.zer7.com/software/hidsharp) — HID device communication
+- [Serilog](https://serilog.net/) — application logging
+
 ## Requirements
 - [.NET 8.0 (Windows)](https://dotnet.microsoft.com/)
-- [HidSharp](https://www.zer7.com/software/hidsharp)
