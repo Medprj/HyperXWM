@@ -612,7 +612,7 @@ public sealed class TrayApp : ApplicationContext
     /// </summary>
     private void SetDisconnectedIcon()
     {
-        SetTray("Disconnected", Resources.dis);
+        SetTray("Disconnected", _isLight ? Resources.dis_b : Resources.dis);
     }
 
     /// <summary>
